@@ -1,0 +1,163 @@
+<?php
+
+
+/**
+ * Implements hook_permission().
+ *
+ * @todo Change sort order where required: http://drupal.org/node/224333#sorting_permissions
+ */
+function protec_permission() {
+  return array(
+
+    'mailing list protec' => array(
+      'title' => t('Mailing list protec'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_init().
+ *
+ * @todo move this to a specific form theme function ?
+ */
+/*function domicours_init() {
+  //drupal_add_css(drupal_get_path('module', 'simplenews') . '/simplenews.css', array('every_page' => TRUE));
+}*/
+
+/**
+ * Implements hook_menu().
+ */
+
+function protec_menu() {
+  $items['gestion-mailing-list'] = array(
+	  'title' => "Gestion des mailing liste",
+	  'desscription' => '',
+    'type' => MENU_CALLBACK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('protec_mailing_page_form'),
+	'access arguments' => array('mailing list protec'),
+	
+	);
+ 
+	return $items;
+}
+
+function _page_form_validate(&$form_state) {
+  $valid_email = valid_email_address($form_state['values']['email']);
+  if (!$valid_email) {
+    form_set_error('mail', t("L'adresse email n'est pas valide."));
+  }
+  $tel=preg_match("/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/",str_replace(" ","",$form_state["values"]["tel"]),$reg);
+	$nb=strlen(str_replace(" ","",$form_state["values"]["tel"]));
+  if(!count($reg)||$nb!=10)
+	  form_set_error('tel',t("Le champ téléphone n'est pas valide"));
+  //$cp=str_replace(" ","",$form_state["values"]["cp"]);
+  $cp=preg_match("/(\d{5})/",str_replace(" ","",$form_state["values"]["cp"]),$reg);
+  if(!count($reg)) 
+	  form_set_error('cp',t("Le champ code postal n'est pas valide"));
+}
+
+function protec_mailing_page_form_submit($form, &$form_state) {
+//	print_r($form_state["values"]);
+	if($form_state["values"]["op"]=="Supprimer")
+		foreach($form_state["values"] as $id=>$val) {
+			$rs=explode("_",$id);
+			if($val==1) echo $rs[0];
+			//print_r(json_decode($val));
+		}
+	elseif($form_state["values"]["op"]=="Ajouter") {
+		
+	}
+	exit;
+}
+
+function protec_mailing_page_form_validate($form, &$form_state) {
+}
+	
+	
+function get_json($url) {
+		$ch = curl_init();
+  	  	
+		curl_setopt($ch, CURLOPT_URL, $url);
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+		curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+		$liste = curl_exec($ch);
+		
+		curl_close($ch);
+		return $liste;
+}
+
+function protec_mailing_page_form($form, &$form_state, $code = NULL) {
+	/*$soap = new SoapClient("https://www.ovh.com/soapi/soapi-re-1.13.wsdl");
+    
+	$soap_session = $soap->login("pc8418-ovh", "laugier17","fr", false);      
+  
+  	define('soap_domain_pcp','protectioncivile-paris17.org');*/
+  	$url="http://www.protectioncivile-paris17.org/test.php?liste";
+  	 $liste=json_decode(get_json($url));
+
+  	 $ml=array();
+  	foreach($liste as $l) $ml[$l->ml]=$l->ml;
+  	
+  	 $users = entity_load('user');
+  	 $options=array();
+  	 foreach($users as $user) {
+  	 	$options[$user->mail]=$user->mail;
+  	 }
+  	 
+  $form["add_mail"]=array(
+  		"#type"=>"fieldset",
+  		"#title"=>t("Ajout d'un courriel à une mailing liste"),
+	);
+	$form["add_mail"]["mailing_liste"]=array(
+		"#type"=>"select",
+		"#options"=>$ml,
+		'#title' => t('Mailing liste'),
+	);
+	$form["add_mail"]["liste"]=array(
+		"#type"=>"select",
+		"#options"=>$options,
+		'#title' => t('Mail'),
+	);
+	$form["add_mail"]["add"]=array(
+		'#type' => 'submit',
+      '#value' => t('Ajouter'),
+      '#weight' => 20,
+	);
+	
+  foreach($liste as $data) {
+  	//print_r($data);
+	 	$form[$data->ml] = array(
+    		'#type' => 'fieldset',
+  		);
+
+  		$form[$data->ml]['#title'] =$data->ml;
+  		$rs=json_decode(get_json($url."&ml=".$data->ml));
+  		//print_r($rs);
+  		foreach($rs->subscribers as $id=>$obj) {
+  		
+  			$form[$data->ml]["email"][$data->ml."_".$id]=array(
+  				"#type"=>"checkbox",
+  				
+  				"#title"=>$obj,
+  				"#size"=>60,
+  			);
+  		}
+  }
+	
+	 $form['del'] = array(
+      '#type' => 'submit',
+      '#value' => t('Supprimer'),
+      '#weight' => 20,
+      // @todo: add clean submit handler
+    );
+  
+
+  $form['#validate'][] = 'protec_mailing_page_form_validate';
+  $form['#submit'][] = 'protec_mailing_page_form_submit';
+
+  return $form;
+}
+
+
